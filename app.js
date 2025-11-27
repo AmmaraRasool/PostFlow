@@ -1,24 +1,40 @@
 import express from "express";
-import dotenv from "dotenv"
+import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
-import cors from "cors"
+import cors from "cors";
 import { errorHandler } from "./src/core/middleware/errorHandler.js";
+
+// AUTH
 import authRouter from "./src/modules/auth/auth.route.js";
-// import aiRoutes from './modules/ai/ai.route.js';
+
+// AI
 import aiRoutes from "./src/modules/ai/ai.route.js";
 
-//post
+// POST
 import postRouter from "./src/modules/post/post.routes.js";
-// user
+
+// USER
 import userRouter from "./src/modules/user/user.route.js";
-// admin
+
+// ADMIN
 import adminRouter from "./src/modules/admin/admin.route.js";
 
-const app = express()
+// LINKEDIN OAUTH
+import linkedinRoutes from "./src/modules/Linkedin/linkedin.routes.js";
+import "./src/modules/Linkedin/linkedinAutoPost.cron.js";
 
-dotenv.config()
 
-app.use(cors());
+const app = express();
+
+dotenv.config();
+
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -27,32 +43,33 @@ app.get("/", (req, res) => {
   res.send("My site is running successfully!");
 });
 
-app.use("/api/v1/auth", authRouter)
+// Auth
+app.use("/api/v1/auth", authRouter);
 
-// user
-app.use("/api/v1/users", userRouter)
+// Users
+app.use("/api/v1/users", userRouter);
 
-// admin
-app.use("/api/v1/admin", adminRouter)
+// Admin
+app.use("/api/v1/admin", adminRouter);
 
-
+// Posts
 app.use("/api/v1/post", postRouter);
 
+// AI
+app.use("/api/v1/ai", aiRoutes);
+
+// LINKEDIN CONNECT + AUTPOST
+app.use("/api/linkedin", linkedinRoutes);
 
 
-app.use('/api/v1/ai', aiRoutes);
-
-
-
-app.get('/health', (req, res) => {
-    res.status(200).json({
-        success: true,
-        message: '🚀 Server is running smoothly - Module Structure',
-        timestamp: new Date().toISOString()
-    });
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "🚀 Server is running smoothly",
+    timestamp: new Date().toISOString(),
+  });
 });
 
+app.use(errorHandler);
 
-app.use(errorHandler)
-
-export default app
+export default app;

@@ -15,7 +15,7 @@ connectDB().then(() => {
 
     // 🕒 CRON RUNS EVERY MINUTE
     
-   import("./src/cron/facebookAutoPost.cron.js");
+   import("./src/cron/linkedinAutoPost.cron.js");
 
 }).catch((err) => {
     console.error("❌ MongoDB Connection Error:", err);
