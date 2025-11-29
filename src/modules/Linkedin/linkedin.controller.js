@@ -1,83 +1,69 @@
-import jwt from "jsonwebtoken";
-import User from "../../models/User.model.js";
-import LinkedinPost from "../../models/LinkedinPost.model.js";
+import axios from "axios";
+import { asyncHandler } from "../../core/utils/async-handler.js";
+import User from "../../models/user.model.js";
+import LinkedinPost from "../../models/linkedinPost.model.js";
 import { autoPublishLinkedInPosts } from "../../core/services/linkedinPost.service.js";
 
-const CLIENT_ID = process.env.LINKEDIN_CLIENT_ID;
-const CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET;
-const REDIRECT_URI = process.env.LINKEDIN_REDIRECT_URI;
-const BASE_URL = process.env.BASE_URL;
+export const connectLinkedIn = asyncHandler(async (req, res) => {
+  const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
 
-function signState(userId) {
-  return jwt.sign({ uid: userId }, process.env.JWT_SECRET, { expiresIn: 600 });
-}
-function verifyState(state) {
-  return jwt.verify(state, process.env.JWT_SECRET);
-}
+  const scope = encodeURIComponent("r_liteprofile w_member_social");
 
-export const connectLinkedIn = async (req, res) => {
-    console.log(CLIENT_ID)
-  const userId = req.user._id.toString();
-  const state = signState(userId);
+  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${process.env.LINKEDIN_CLIENT_ID}&redirect_uri=${redirectUri}&scope=${scope}`;
 
-  // 🛑 FIX: Remove 'w_member_social' unless your application is approved for it.
-  // Use the standard scopes that come with the "Sign In with LinkedIn" product.
-  const scope = encodeURIComponent("r_liteprofile r_emailaddress"); 
+  res.redirect(authUrl);
+});
 
-  const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}&scope=${scope}`;
-console.log(url)
-   res.redirect(url);
+export const linkedinCallback = asyncHandler(async (req, res) => {
+  const { code } = req.query;
 
+  const tokenUrl = "https://www.linkedin.com/oauth/v2/accessToken";
 
-};
+  const response = await axios.post(
+    tokenUrl,
+    null,
+    {
+      params: {
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: process.env.LINKEDIN_REDIRECT_URI,
+        client_id: process.env.LINKEDIN_CLIENT_ID,
+        client_secret: process.env.LINKEDIN_CLIENT_SECRET,
+      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    }
+  );
 
-export const linkedinCallback = async (req, res) => {
-  const { code, state } = req.query;
-  if (!code || !state) return res.status(400).send("Missing code or state");
-  let payload;
-  try { payload = verifyState(state); } catch { return res.status(400).send("Invalid state"); }
-  const userId = payload.uid;
+  const { access_token, expires_in } = response.data;
 
-  const tokenResp = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: REDIRECT_URI,
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET
-    })
+  const profile = await axios.get("https://api.linkedin.com/v2/me", {
+    headers: { Authorization: `Bearer ${access_token}` },
   });
-  const tokenJson = await tokenResp.json();
-  if (!tokenResp.ok) return res.status(400).json(tokenJson);
 
-  const { access_token, expires_in } = tokenJson;
-  const user = await User.findById(userId);
-  user.linkedinAccessToken = access_token;
-  user.linkedinExpiresAt = new Date(Date.now() + expires_in * 1000);
-  await user.save();
+  await User.findByIdAndUpdate(req.user._id, {
+    linkedinAccessToken: access_token,
+    linkedinExpiresAt: Date.now() + expires_in * 1000,
+    linkedinId: profile.data.id,
+  });
 
-  res.redirect(`${BASE_URL}/dashboard?linkedin=connected`);
-};
+  res.redirect(process.env.CLIENT_URL + "/linkedin/success");
+});
 
-export const schedulePost = async (req, res) => {
-  const user = req.user;
-  const { text, mediaUrl, scheduleAt } = req.body;
-  if (!text || !scheduleAt) return res.status(400).json({ success: false, message: "text and scheduleAt required" });
+export const schedulePost = asyncHandler(async (req, res) => {
+  const { text, imageUrl, scheduledAt } = req.body;
 
-  const post = await LinkedinPost.create({
-    userId: user._id,
+  await LinkedinPost.create({
+    user: req.user._id,
     text,
-    mediaUrl: mediaUrl || null,
-    scheduleAt: new Date(scheduleAt),
-    status: "scheduled"
+    imageUrl,
+    scheduledAt,
+    status: "scheduled",
   });
 
-  res.status(201).json({ success: true, post });
-};
+  res.json({ success: true, message: "Post scheduled successfully!" });
+});
 
-export const runLinkedInAutoPost = async (req, res) => {
+export const runLinkedInAutoPost = asyncHandler(async (req, res) => {
   await autoPublishLinkedInPosts();
-  res.json({ success: true, message: "Auto-post job executed" });
-};
+  res.json({ success: true, message: "Cron executed manually!" });
+});

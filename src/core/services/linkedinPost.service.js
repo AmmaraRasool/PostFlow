@@ -1,61 +1,85 @@
 import axios from "axios";
-import LinkedinPost from "../../models/LinkedinPost.model.js";
+import User from "../../models/user.model.js";
+import LinkedinPost from "../../models/linkedinPost.model.js";
 
 export const autoPublishLinkedInPosts = async () => {
-  const now = new Date();
-  const postsToPublish = await LinkedinPost.find({
+  const posts = await LinkedinPost.find({
     status: "scheduled",
-    scheduleAt: { $lte: now }
-  }).limit(20).populate("userId");
+    scheduledAt: { $lte: new Date() },
+  }).populate("user");
 
-  for (let post of postsToPublish) {
+  for (let post of posts) {
     try {
-      const user = post.userId;
-      if (!user?.linkedinAccessToken) {
-        post.status = "failed";
-        post.result = { error: "LinkedIn not connected" };
-        await post.save();
+      const user = post.user;
+
+      if (!user.linkedinAccessToken) {
         continue;
       }
 
-      const body = {
-        author: `urn:li:person:${user._id}`,
-        lifecycleState: "PUBLISHED",
-        specificContent: {
-          "com.linkedin.ugc.ShareContent": {
-            shareCommentary: { text: post.text },
-            shareMediaCategory: post.mediaUrl ? "IMAGE" : "NONE",
-            media: post.mediaUrl
-              ? [{ status: "READY", description: { text: post.text }, media: post.mediaUrl, title: { text: "Image" } }]
-              : []
-          }
-        },
-        visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" }
-      };
+      // Upload image if exists
+      let mediaUrn = null;
 
-      const resp = await axios.post(
-        "https://api.linkedin.com/v2/ugcPosts",
-        body,
+      if (post.imageUrl) {
+        const register = await axios.post(
+          "https://api.linkedin.com/rest/assets?action=registerUpload",
+          {
+            registerUploadRequest: {
+              owner: `urn:li:person:${user.linkedinId}`,
+              recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+              serviceRelationships: [
+                { identifier: "urn:li:userGeneratedContent", relationshipType: "OWNER" }
+              ],
+            },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${user.linkedinAccessToken}`,
+              "Content-Type": "application/json",
+              "X-Restli-Protocol-Version": "2.0.0",
+            },
+          }
+        );
+
+        const uploadUrl = register.data.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
+        mediaUrn = register.data.value.asset;
+
+        await axios.put(uploadUrl, post.imageUrl, {
+          headers: { "Content-Type": "image/jpeg" },
+        });
+      }
+
+      // Create post
+      await axios.post(
+        "https://api.linkedin.com/rest/posts",
+        {
+          author: `urn:li:person:${user.linkedinId}`,
+          commentary: post.text,
+          visibility: "PUBLIC",
+          distribution: { feedDistribution: "MAIN_FEED" },
+          content: mediaUrn
+            ? {
+                media: {
+                  title: "Image",
+                  id: mediaUrn,
+                },
+              }
+            : null,
+        },
         {
           headers: {
             Authorization: `Bearer ${user.linkedinAccessToken}`,
             "Content-Type": "application/json",
-            "X-Restli-Protocol-Version": "2.0.0"
-          }
+            "X-Restli-Protocol-Version": "2.0.0",
+          },
         }
       );
 
       post.status = "posted";
-      post.postedAt = new Date();
-      post.result = resp.data;
       await post.save();
-
-      console.log(`✅ Post ${post._id} auto-published`);
     } catch (err) {
+      console.log("LinkedIn autopost error:", err.response?.data || err);
       post.status = "failed";
-      post.result = { error: err.response?.data || err.message };
       await post.save();
-      console.error(`❌ Error posting ${post._id}`, err.message);
     }
   }
 };

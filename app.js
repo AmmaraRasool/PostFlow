@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { errorHandler } from "./src/core/middleware/errorHandler.js";
+import "./src/modules/Linkedin/linkedinAutoPost.cron.js";
 
 // AUTH
 import authRouter from "./src/modules/auth/auth.route.js";
@@ -21,7 +22,6 @@ import adminRouter from "./src/modules/admin/admin.route.js";
 
 // LINKEDIN OAUTH
 import linkedinRoutes from "./src/modules/Linkedin/linkedin.routes.js";
-import "./src/modules/Linkedin/linkedinAutoPost.cron.js";
 
 
 const app = express();
@@ -59,7 +59,7 @@ app.use("/api/v1/post", postRouter);
 app.use("/api/v1/ai", aiRoutes);
 
 // LINKEDIN CONNECT + AUTPOST
-app.use("/api/linkedin", linkedinRoutes);
+app.use("/api/linkedin/v1", linkedinRoutes);
 
 
 app.get("/health", (req, res) => {

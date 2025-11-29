@@ -22,9 +22,7 @@ const userSchema = new mongoose.Schema(
     // Refresh Token
     userRefreshToken: { type: String, default: null },
 
-    // ----------------------------
-    // LINKEDIN OAUTH FIELDS
-    // ----------------------------
+    // LinkedIn OAuth fields
     linkedinId: { type: String, default: null },
     linkedinAccessToken: { type: String, default: null },
     linkedinRefreshToken: { type: String, default: null },
@@ -78,37 +76,5 @@ userSchema.methods.hashToken = function (token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 };
 
-const User = mongoose.model("User", userSchema);
-
-export default User;
-
-
-
-
-
-
-
-
-// import mongoose from "mongoose";
-// import bcrypt from "bcryptjs";
-
-// const userSchema = new mongoose.Schema({
-//   userName: { type: String, required: true },
-//   userEmail: { type: String, required: true, unique: true },
-//   userPassword: { type: String, required: true },
-//   linkedinAccessToken: { type: String, default: null },
-//   linkedinExpiresAt: { type: Date, default: null },
-// });
-
-// userSchema.pre("save", async function (next) {
-//   if (!this.isModified("userPassword")) return next();
-//   this.userPassword = await bcrypt.hash(this.userPassword, 10);
-//   next();
-// });
-
-// userSchema.methods.isPasswordCorrect = async function (password) {
-//   return bcrypt.compare(password, this.userPassword);
-// };
-
-// const User = mongoose.model("User", userSchema);
-// export default User;
+// FINAL FIXED EXPORT
+export default mongoose.models.User || mongoose.model("User", userSchema);

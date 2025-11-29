@@ -5,8 +5,10 @@ import { isLoggedIn } from "../../core/middleware/isLoggedin.js";
 const router = express.Router();
 
 router.get("/connect", isLoggedIn, connectLinkedIn);
-router.get("/callback", linkedinCallback);
+router.get("/callback", isLoggedIn, linkedinCallback);
 router.post("/schedule", isLoggedIn, schedulePost);
-router.get("/run-auto-post", runLinkedInAutoPost); // manual test
+
+// manual trigger for debugging
+router.get("/run-auto-post", runLinkedInAutoPost);
 
 export default router;
