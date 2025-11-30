@@ -17,7 +17,7 @@ const scheduleSchema = new mongoose.Schema({
     },
     platform: {
         type: String,
-        enum: ["facebook", "instagram", "tiktok", "twitter"],
+        enum: ["linkedin", "facebook", "instagram", "tiktok", "twitter"],
         required: true,
     },
     status: {

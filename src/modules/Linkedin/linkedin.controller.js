@@ -7,7 +7,7 @@ import { autoPublishLinkedInPosts } from "../../core/services/linkedinPost.servi
 export const connectLinkedIn = asyncHandler(async (req, res) => {
   const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
 
-  const scope = encodeURIComponent("r_liteprofile w_member_social");
+  const scope = encodeURIComponent("r_liteprofile r_emailaddress w_member_social");
 
   const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${process.env.LINKEDIN_CLIENT_ID}&redirect_uri=${redirectUri}&scope=${scope}`;
 

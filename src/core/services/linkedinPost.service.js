@@ -17,36 +17,54 @@ export const autoPublishLinkedInPosts = async () => {
       }
 
       // Upload image if exists
-      let mediaUrn = null;
+      // Upload image if exists
+let mediaUrn = null;
 
-      if (post.imageUrl) {
-        const register = await axios.post(
-          "https://api.linkedin.com/rest/assets?action=registerUpload",
+if (post.imageUrl) {
+  // 1. Register upload
+  const register = await axios.post(
+    "https://api.linkedin.com/rest/assets?action=registerUpload",
+    {
+      registerUploadRequest: {
+        owner: `urn:li:person:${user.linkedinId}`,
+        recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+        serviceRelationships: [
           {
-            registerUploadRequest: {
-              owner: `urn:li:person:${user.linkedinId}`,
-              recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-              serviceRelationships: [
-                { identifier: "urn:li:userGeneratedContent", relationshipType: "OWNER" }
-              ],
-            },
+            identifier: "urn:li:userGeneratedContent",
+            relationshipType: "OWNER",
           },
-          {
-            headers: {
-              Authorization: `Bearer ${user.linkedinAccessToken}`,
-              "Content-Type": "application/json",
-              "X-Restli-Protocol-Version": "2.0.0",
-            },
-          }
-        );
+        ],
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${user.linkedinAccessToken}`,
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+    }
+  );
 
-        const uploadUrl = register.data.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
-        mediaUrn = register.data.value.asset;
+  const uploadUrl =
+    register.data.value.uploadMechanism[
+      "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
+    ].uploadUrl;
 
-        await axios.put(uploadUrl, post.imageUrl, {
-          headers: { "Content-Type": "image/jpeg" },
-        });
-      }
+  mediaUrn = register.data.value.asset;
+
+  // 2. Download image as binary from S3
+  const image = await axios.get(post.imageUrl, {
+    responseType: "arraybuffer",
+  });
+
+  // 3. Upload the binary file to LinkedIn
+  await axios.put(uploadUrl, image.data, {
+    headers: {
+      "Content-Type": "image/jpeg",
+    },
+  });
+}
+
 
       // Create post
       await axios.post(
