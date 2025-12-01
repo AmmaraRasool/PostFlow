@@ -59,7 +59,7 @@ app.use("/api/v1/post", postRouter);
 app.use("/api/v1/ai", aiRoutes);
 
 // LINKEDIN CONNECT + AUTPOST
-app.use("/api/linkedin/v1", linkedinRoutes);
+app.use("/api/linkedin", linkedinRoutes);
 
 
 app.get("/health", (req, res) => {

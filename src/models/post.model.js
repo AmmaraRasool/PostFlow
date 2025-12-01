@@ -15,6 +15,7 @@ const postSchema = new mongoose.Schema({
   media: [
     {
       url: { type: String, required: true },
+      key: { type: String, required: true },         // store key for deletes
       type: { type: String, enum: ["image", "video"], required: true }
     }
   ],
@@ -32,10 +33,10 @@ const postSchema = new mongoose.Schema({
     required: true
   },
 
-  accessToken: { // <-- added
+  accessToken: { // long-lived page token (required if platforms include facebook)
     type: String,
     required: function() {
-      return this.platforms.includes('facebook');
+      return Array.isArray(this.platforms) && this.platforms.includes('facebook');
     }
   },
 
@@ -58,7 +59,6 @@ const postSchema = new mongoose.Schema({
   publishedAt: { 
     type: Date 
   },
-  accessToken: { type: String, required: true }, // long-lived page token
 
   platformPostId: { // store FB post ID
     type: String, 

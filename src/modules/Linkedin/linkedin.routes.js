@@ -1,14 +1,10 @@
 import express from "express";
-import { connectLinkedIn, linkedinCallback, schedulePost, runLinkedInAutoPost } from "./linkedin.controller.js";
-import { isLoggedIn } from "../../core/middleware/isLoggedin.js";
+import { linkedinAuthRedirect, linkedinCallback, linkedinPost, linkedinautoPost } from "./linkedin.controller.js";
 
-const router = express.Router();
+const linkedinRoutes = express.Router();
 
-router.get("/connect", isLoggedIn, connectLinkedIn);
-router.get("/callback", isLoggedIn, linkedinCallback);
-router.post("/schedule", isLoggedIn, schedulePost);
+linkedinRoutes.get("/auth", linkedinAuthRedirect);
+linkedinRoutes.get("/callback", linkedinCallback);
+linkedinRoutes.post("/post", linkedinPost);
 
-// manual trigger for debugging
-router.get("/run-auto-post", runLinkedInAutoPost);
-
-export default router;
+export default linkedinRoutes;
