@@ -1,3 +1,4 @@
+// src/models/user.model.js
 import mongoose from "mongoose";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -33,6 +34,22 @@ const userSchema = new mongoose.Schema(
       profilePicture: String,
       headline: String,
     },
+
+    // === Facebook fields (added) ===
+    // Store the Page ID the user connected (optional per-user)
+    facebookPageId: { type: String, default: null },
+    // Store the Page Access Token (long-lived) for posting
+    facebookPageAccessToken: { type: String, default: null },
+
+    // Optionally store multiple pages (array) if you want later
+    facebookPages: [
+      {
+        pageId: String,
+        pageName: String,
+        accessToken: String,
+      },
+    ],
+    // =================================
   },
   { timestamps: true }
 );
