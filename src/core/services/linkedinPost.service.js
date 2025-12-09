@@ -1,92 +1,156 @@
-// src/core/services/linkedinPost.service.js
+// src/modules/LinkedIn/linkedinPost.service.js
 import axios from "axios";
-import User from "../../models/user.model.js";
-import LinkedinPost from "../../models/linkedinPost.model.js";
 
-export const autoPublishLinkedInPosts = async () => {
-  const posts = await LinkedinPost.find({
-    status: "scheduled",
-    scheduledAt: { $lte: new Date() },
-  }).populate("user");
+/* -----------------------------------------------------------
+   STEP 1 — Register Upload (Get Upload URL + Asset URN)
+----------------------------------------------------------- */
+async function registerUpload(accessToken, authorURN, mediaType) {
+  const recipe = mediaType.startsWith("image")
+    ? "urn:li:digitalmediaRecipe:feedshare-image"
+    : "urn:li:digitalmediaRecipe:feedshare-video";
 
-  for (let post of posts) {
-    try {
-      const user = post.user;
-
-      if (!user.linkedinAccessToken) {
-        continue;
-      }
-
-      let mediaUrn = null;
-
-      // Upload image if exists
-      if (post.imageUrl) {
-        const register = await axios.post(
-          "https://api.linkedin.com/rest/assets?action=registerUpload",
+  const res = await axios.post(
+    "https://api.linkedin.com/v2/assets?action=registerUpload",
+    {
+      registerUploadRequest: {
+        recipes: [recipe],
+        owner: authorURN,
+        serviceRelationships: [
           {
-            registerUploadRequest: {
-              owner: `urn:li:person:${user.linkedinId}`,
-              recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-              serviceRelationships: [
-                {
-                  identifier: "urn:li:userGeneratedContent",
-                  relationshipType: "OWNER",
-                },
-              ],
-            },
+            relationshipType: "OWNER",
+            identifier: "urn:li:userGeneratedContent",
           },
-          {
-            headers: {
-              Authorization: `Bearer ${user.linkedinAccessToken}`,
-              "Content-Type": "application/json",
-              "X-Restli-Protocol-Version": "2.0.0",
-            },
-          }
-        );
-
-        const uploadUrl =
-          register.data.value.uploadMechanism[
-            "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
-          ].uploadUrl;
-
-        mediaUrn = register.data.value.asset;
-
-        const image = await axios.get(post.imageUrl, {
-          responseType: "arraybuffer",
-        });
-
-        await axios.put(uploadUrl, image.data, {
-          headers: { "Content-Type": "image/jpeg" },
-        });
-      }
-
-      // Create LinkedIn Post
-      await axios.post(
-        "https://api.linkedin.com/rest/posts",
-        {
-          author: `urn:li:person:${user.linkedinId}`,
-          commentary: post.text,
-          visibility: "PUBLIC",
-          distribution: { feedDistribution: "MAIN_FEED" },
-          content: mediaUrn
-            ? { media: { title: "Image", id: mediaUrn } }
-            : null,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${user.linkedinAccessToken}`,
-            "Content-Type": "application/json",
-            "X-Restli-Protocol-Version": "2.0.0",
-          },
-        }
-      );
-
-      post.status = "posted";
-      await post.save();
-    } catch (err) {
-      console.log("LinkedIn autopost error:", err.response?.data || err);
-      post.status = "failed";
-      await post.save();
+        ],
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
     }
+  );
+
+  const uploadUrl =
+    res.data.value.uploadMechanism[
+      "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
+    ].uploadUrl;
+
+  const assetURN = res.data.value.asset;
+
+  return { uploadUrl, assetURN };
+}
+
+/* -----------------------------------------------------------
+   STEP 2 — Upload Media to LinkedIn
+----------------------------------------------------------- */
+async function uploadMediaToLinkedIn(uploadUrl, mediaUrl) {
+  const mediaRes = await axios.get(mediaUrl, {
+    responseType: "arraybuffer",
+  });
+
+  const fileData = mediaRes.data;
+  const mimeType = mediaRes.headers["content-type"];
+
+  await axios.put(uploadUrl, fileData, {
+    headers: {
+      "Content-Type": mimeType,
+    },
+  });
+
+  return mimeType;
+}
+
+/* -----------------------------------------------------------
+   STEP 3 — Create LinkedIn UGC Post
+----------------------------------------------------------- */
+async function publishLinkedInPost({
+  accessToken,
+  caption,
+  authorURN,
+  mediaUrl,
+  mediaType,
+}) {
+  // TEXT ONLY
+  if (!mediaUrl || !mediaType) {
+    const postRes = await axios.post(
+      "https://api.linkedin.com/v2/ugcPosts",
+      {
+        author: authorURN,
+        lifecycleState: "PUBLISHED",
+        specificContent: {
+          "com.linkedin.ugc.ShareContent": {
+            shareCommentary: { text: caption },
+            shareMediaCategory: "NONE",
+          },
+        },
+        visibility: {
+          "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+      }
+    );
+
+    return {
+      postId: postRes.headers["x-linkedin-id"],
+      asset: null,
+    };
   }
+
+  // MEDIA MODE
+  const { uploadUrl, assetURN } = await registerUpload(
+    accessToken,
+    authorURN,
+    mediaType
+  );
+
+  await uploadMediaToLinkedIn(uploadUrl, mediaUrl);
+
+  const mediaCategory = mediaType.startsWith("image") ? "IMAGE" : "VIDEO";
+
+  const postRes = await axios.post(
+    "https://api.linkedin.com/v2/ugcPosts",
+    {
+      author: authorURN,
+      lifecycleState: "PUBLISHED",
+      specificContent: {
+        "com.linkedin.ugc.ShareContent": {
+          shareCommentary: { text: caption },
+          shareMediaCategory: mediaCategory,
+          media: [
+            {
+              status: "READY",
+              media: assetURN,
+            },
+          ],
+        },
+      },
+      visibility: {
+        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+    }
+  );
+
+  return {
+    postId: postRes.headers["x-linkedin-id"],
+    asset: assetURN,
+  };
+}
+
+export default {
+  publishLinkedInPost,
 };

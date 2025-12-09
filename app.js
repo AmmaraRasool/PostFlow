@@ -52,9 +52,9 @@ app.use("/api/v1/post", postRouter);
 app.use("/api/v1/ai", aiRoutes);
 
 // LINKEDIN CONNECT + manual post endpoints
-app.use("/api/linkedin", linkedinRoutes);
+app.use("/api/v1/linkedin", linkedinRoutes);
 
-app.use("/api/facebook", facebookRoutes);
+app.use("/api/v1/facebook", facebookRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({

@@ -23,7 +23,7 @@ const postSchema = new mongoose.Schema({
   platforms: [
     { 
       type: String, 
-      enum: ["facebook", "instagram"],
+      enum: ["facebook", "instagram", "linkedin"],
       required: true
     }
   ],

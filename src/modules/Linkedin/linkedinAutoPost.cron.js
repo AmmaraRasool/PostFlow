@@ -1,17 +1,48 @@
 import cron from "node-cron";
-import { autoPublishLinkedInPosts } from "../../core/services/linkedinPost.service.js";
+import Post from "../../models/post.model.js";
+import User from "../../models/user.model.js";
+import linkedinService from "../../core/services/linkedinPost.service.js";
 
-// Run every minute
-cron.schedule("*/1 * * * *", async () => {
-  console.log("⏳ Running unified Post Auto Cron...");
-  try {
-    // LinkedIn autopost
-    await autoPublishLinkedInPosts();
+cron.schedule("* * * * *", async () => {
+  console.log("🔄 LinkedIn Cron Running...");
 
-    // TODO: call autoPublishFacebookPosts();
-    // TODO: call autoPublishInstagramPosts();
+  const now = new Date();
 
-  } catch (err) {
-    console.error("Error in post auto cron:", err);
+  const posts = await Post.find({
+    status: "scheduled",
+    platforms: "linkedin",
+    scheduledTime: { $lte: now },
+  });
+
+  for (const post of posts) {
+    try {
+      const user = await User.findById(post.userId);
+      if (!user || !user.linkedinAccessToken) {
+        console.log("❌ No LinkedIn access token found for user");
+        continue;
+      }
+
+      // Upload first media only for LinkedIn
+      const media = post.media[0];
+
+      const result = await linkedinService.publishLinkedInPost({
+        accessToken: user.linkedinAccessToken,
+        caption: post.caption,
+        authorURN: `urn:li:person:${user.linkedinId}`,
+        mediaUrl: media?.url || null,
+        mediaType: media ? media.type : null,
+      });
+
+      post.status = "posted";
+      post.publishedAt = new Date();
+      post.platformPostId = result.postId;
+      await post.save();
+
+      console.log(`✅ LinkedIn post published: ${result.postId}`);
+    } catch (err) {
+      console.log("❌ LinkedIn cron error:", err.response?.data || err);
+      post.status = "failed";
+      await post.save();
+    }
   }
 });
