@@ -6,8 +6,6 @@ const linkedinRoutes = express.Router();
 linkedinRoutes.get("/auth", linkedinAuthRedirect);
 linkedinRoutes.get("/callback", linkedinCallback);
 linkedinRoutes.post("/post", linkedinPost);
-
-// Auto post (manual trigger, NOT cron)
 linkedinRoutes.post("/auto-post", linkedinautoPost);
 
 export default linkedinRoutes;
